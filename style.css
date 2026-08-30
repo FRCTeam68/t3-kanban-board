@@ -43,7 +43,6 @@ header {
 }
 .logo-img {
   width: 100%; height: 100%; object-fit: contain; display: block;
-  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.35));
 }
 
 h1 {
@@ -79,9 +78,41 @@ h1 {
 
 /* Main Workspace */
 main {
+  position: relative;
   height: calc(100vh - 110px);
   padding: 20px 22px 14px;
   display: flex; flex-direction: column; min-height: 0;
+}
+
+/* Loading Screen */
+.board-loader {
+  position: absolute;
+  top: 20px; left: 22px; right: 22px; bottom: 58px;
+  background: rgba(236, 239, 244, 0.95);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 18px;
+  border-radius: 8px;
+  z-index: 50;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+.board-loader.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.spinner {
+  width: 54px; height: 54px;
+  border: 6px solid #ccd2dc;
+  border-top-color: var(--orange);
+  border-radius: 50%;
+  animation: rotate 0.85s linear infinite;
+}
+.loading-text {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  color: var(--blue);
+  font-size: 20px;
 }
 
 .board {

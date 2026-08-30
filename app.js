@@ -34,6 +34,13 @@ function updateBacklogBtn() {
   if (btn) btn.textContent = showBacklog ? "📂 Hide Backlog" : "📁 Show Backlog";
 }
 
+function hideLoader() {
+  const loader = document.getElementById("boardLoader");
+  if (loader) {
+    loader.classList.add("hidden");
+  }
+}
+
 // Multi-level column sorting: Due Date (ascending) -> Priority (High -> Med -> Low)
 function sortTasks(taskList) {
   const prioWeight = { high: 0, medium: 1, low: 2 };
@@ -56,6 +63,7 @@ function sortTasks(taskList) {
 async function fetchTasksFromSheets(isManual = false) {
   if (!API_URL || API_URL.includes("YOUR_APPS_SCRIPT")) {
     setSyncStatus("error", "Add Google Apps Script URL in Settings (⚙)");
+    hideLoader();
     return;
   }
   const btn = document.getElementById("refreshBtn");
@@ -75,6 +83,7 @@ async function fetchTasksFromSheets(isManual = false) {
     setSyncStatus("error", "Sync failed • Check connection");
   } finally {
     if (btn) btn.classList.remove("spinning");
+    hideLoader(); // Always dismiss loading overlay once first network round-trip concludes
   }
 }
 
