@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Truck Town Thunder — Robotics Kanban</title>
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="https://www.trucktownthunder.com/wp-content/uploads/2026/08/ORANGE-transparent-outline.png">
@@ -29,10 +29,10 @@
     </div>
   </div>
   <div class="toolbar">
-    <button id="toggleBacklogBtn" onclick="toggleBacklog()">📁 Show Backlog</button>
-    <button id="refreshBtn" onclick="manualRefresh()"><span class="spin-icon">🔄</span> Refresh</button>
+    <button id="toggleBacklogBtn" onclick="toggleBacklog()"><span class="btn-text">📁 Show Backlog</span></button>
+    <button id="refreshBtn" onclick="manualRefresh()"><span class="spin-icon">🔄</span> <span class="btn-text">Refresh</span></button>
     <button class="hide-small" onclick="openClaim()">🙋 What should I do?</button>
-    <button onclick="openSettings()">⚙ Settings</button>
+    <button onclick="openSettings()">⚙ <span class="btn-text-settings">Settings</span></button>
   </div>
 </header>
 
@@ -46,7 +46,7 @@
   <div class="board" id="board"></div>
   <div class="footer">
     <div class="saved"><span class="dot" id="syncDot"></span><span id="saveStatus">Connecting to Sheets...</span></div>
-    <div>Tap card to assign multiple students/mentor • ✏️ icon to edit details • Drag to change status</div>
+    <div class="footer-help">Tap card to assign • ✏️ to edit • Drag/Swipe to move</div>
   </div>
 </main>
 
@@ -105,19 +105,19 @@
   </div>
 </div>
 
-<!-- Quick Blocker Association Modal (Triggered on Drag to Blocked) -->
+<!-- Quick Blocker Association Modal -->
 <div class="modal-backdrop" id="blockerPromptModal">
-  <div class="modal" style="width: min(650px, 94vw); border-top-color: var(--danger);">
+  <div class="modal" style="border-top-color: var(--danger);">
     <h2 style="color: var(--danger);">What is blocking this task?</h2>
     <div class="claim-card" id="blockerTaskSummary"></div>
     <div class="field full">
-      <label for="promptBlockedBySelect">Select the prerequisite task or dependency:</label>
+      <label for="promptBlockedBySelect">Select prerequisite task or dependency:</label>
       <select id="promptBlockedBySelect" style="margin-top: 6px;">
         <option value="">-- None / External Issue --</option>
       </select>
     </div>
     <div class="modal-actions">
-      <button onclick="cancelBlockerPrompt()">Cancel Move</button>
+      <button onclick="cancelBlockerPrompt()">Cancel</button>
       <button class="primary" style="background: var(--danger); border-color: var(--danger);" onclick="confirmBlockerPrompt()">Mark as Blocked</button>
     </div>
   </div>

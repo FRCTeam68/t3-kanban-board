@@ -31,7 +31,14 @@ function toggleBacklog() {
 
 function updateBacklogBtn() {
   const btn = document.getElementById("toggleBacklogBtn");
-  if (btn) btn.textContent = showBacklog ? "📂 Hide Backlog" : "📁 Show Backlog";
+  if (btn) {
+    const textSpan = btn.querySelector(".btn-text");
+    if (textSpan) {
+      textSpan.textContent = showBacklog ? "📂 Hide Backlog" : "📁 Show Backlog";
+    } else {
+      btn.textContent = showBacklog ? "📂 Hide Backlog" : "📁 Show Backlog";
+    }
+  }
 }
 
 function hideLoader() {
@@ -83,7 +90,7 @@ async function fetchTasksFromSheets(isManual = false) {
     setSyncStatus("error", "Sync failed • Check connection");
   } finally {
     if (btn) btn.classList.remove("spinning");
-    hideLoader(); // Always dismiss loading overlay once first network round-trip concludes
+    hideLoader();
   }
 }
 
@@ -128,6 +135,8 @@ function render() {
   ];
   
   const visibleCols = showBacklog ? allCols : allCols.filter(([status]) => status !== "backlog");
+  
+  // Set desktop grid columns (on mobile, CSS flex override handles snap-scrolling)
   board.style.gridTemplateColumns = `repeat(${visibleCols.length}, minmax(260px, 1fr))`;
 
   visibleCols.forEach(([status, label]) => {
@@ -210,37 +219,46 @@ function makeCard(task) {
   });
   el.addEventListener("dragend", () => el.classList.remove("dragging"));
   
-  let startX=0, startY=0, moved=false;
+  // Touch / Pointer handling with drag-vs-scroll detection
+  let startX = 0, startY = 0, isDragging = false;
+  
   el.addEventListener("pointerdown", e => {
     if (e.pointerType === "mouse") return;
-    startX=e.clientX; startY=e.clientY; moved=false;
-    try { el.setPointerCapture(e.pointerId); } catch(_){}
+    startX = e.clientX;
+    startY = e.clientY;
+    isDragging = false;
   });
+
   el.addEventListener("pointermove", e => {
     if (e.pointerType === "mouse") return;
-    if (Math.hypot(e.clientX-startX,e.clientY-startY) > 18) {
-      moved=true;
-      el.style.opacity="0.55";
-      highlightDrop(e.clientX,e.clientY);
+    const deltaX = Math.abs(e.clientX - startX);
+    const deltaY = Math.abs(e.clientY - startY);
+
+    // If moving predominantly vertically or far enough, treat as drag
+    if (deltaX > 25 || deltaY > 25) {
+      isDragging = true;
+      el.style.opacity = "0.55";
+      highlightDrop(e.clientX, e.clientY);
     }
   });
+
   el.addEventListener("pointerup", e => {
     if (e.pointerType === "mouse") return;
-    el.style.opacity="";
-    if (moved) {
-      suppressCardClick=true;
-      const target = document.elementFromPoint(e.clientX,e.clientY)?.closest(".dropzone");
+    el.style.opacity = "";
+    if (isDragging) {
+      suppressCardClick = true;
+      const target = document.elementFromPoint(e.clientX, e.clientY)?.closest(".dropzone");
       if (target) moveTask(task.id, target.dataset.status);
-      setTimeout(()=>suppressCardClick=false, 120);
+      setTimeout(() => { suppressCardClick = false; }, 140);
     }
   });
 
   return el;
 }
 
-function highlightDrop(x,y) {
+function highlightDrop(x, y) {
   document.querySelectorAll(".dropzone").forEach(z => z.classList.remove("dragover"));
-  const z = document.elementFromPoint(x,y)?.closest(".dropzone");
+  const z = document.elementFromPoint(x, y)?.closest(".dropzone");
   if (z) z.classList.add("dragover");
 }
 
