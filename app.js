@@ -219,8 +219,11 @@ function makeCard(task) {
 
   el.innerHTML = `
     <div class="card-top">
+      <div class="drag-handle" title="Hold & drag to move column">⋮⋮</div>
       <div class="card-title">${escapeHtml(task.title)}</div>
-      <button class="edit-btn" title="Edit details">✏️</button>
+      <div class="card-header-actions">
+        <button class="edit-btn" title="Edit details">✏️</button>
+      </div>
     </div>
     ${task.desc ? `<div class="card-desc">${escapeHtml(task.desc)}</div>` : ""}
     <div class="meta">
@@ -241,8 +244,9 @@ function makeCard(task) {
     openEditModal(task.id);
   });
 
-  el.addEventListener("click", () => {
-    if (suppressCardClick) return;
+  // Tapping the card body opens assignment
+  el.addEventListener("click", e => {
+    if (suppressCardClick || e.target.closest(".drag-handle")) return;
     openAssignment(task.id);
   });
 
@@ -252,9 +256,12 @@ function makeCard(task) {
     e.dataTransfer.setData("text/plain", String(task.id));
   });
 
-  // Touch / Smartboard Pointer Drag Engine
-  el.addEventListener("pointerdown", e => {
+  // Handle-Only Drag System: Touching the handle moves the card; touching the card body scrolls
+  const handle = el.querySelector(".drag-handle");
+
+  handle.addEventListener("pointerdown", e => {
     if (e.button !== 0 && e.pointerType === "mouse") return;
+    e.stopPropagation();
     activeDragCard = el;
     dragStartX = e.clientX;
     dragStartY = e.clientY;
@@ -264,19 +271,19 @@ function makeCard(task) {
     dragOffsetX = e.clientX - rect.left;
     dragOffsetY = e.clientY - rect.top;
 
-    try { el.setPointerCapture(e.pointerId); } catch (_) {}
+    try { handle.setPointerCapture(e.pointerId); } catch (_) {}
   });
 
-  el.addEventListener("pointermove", e => {
+  handle.addEventListener("pointermove", e => {
     if (!activeDragCard || activeDragCard !== el) return;
+    e.stopPropagation();
 
     const dist = Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY);
-    if (!isDraggingActive && dist > 10) {
+    if (!isDraggingActive && dist > 8) {
       isDraggingActive = true;
       suppressCardClick = true;
       el.classList.add("dragging-origin");
 
-      // Spawn floating visual card directly attached to the finger
       if (!touchClone) {
         touchClone = el.cloneNode(true);
         touchClone.className = el.className + " touch-drag-clone";
@@ -296,6 +303,7 @@ function makeCard(task) {
 
   const endDrag = e => {
     if (!activeDragCard || activeDragCard !== el) return;
+    e.stopPropagation();
 
     if (isDraggingActive) {
       const dropTarget = document.elementFromPoint(e.clientX, e.clientY)?.closest(".dropzone");
@@ -315,8 +323,8 @@ function makeCard(task) {
     isDraggingActive = false;
   };
 
-  el.addEventListener("pointerup", endDrag);
-  el.addEventListener("pointercancel", endDrag);
+  handle.addEventListener("pointerup", endDrag);
+  handle.addEventListener("pointercancel", endDrag);
 
   return el;
 }
