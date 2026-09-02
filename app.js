@@ -31,6 +31,26 @@ function setSyncStatus(state, msg) {
   txt.textContent = msg;
 }
 
+// Touch-safe button listener binder (handles touch and mouse cleanly on Android boards)
+function bindTouchButton(elementId, callback) {
+  const btn = document.getElementById(elementId);
+  if (!btn) return;
+
+  let lastTouchTime = 0;
+
+  btn.addEventListener("pointerup", (e) => {
+    e.stopPropagation();
+    lastTouchTime = Date.now();
+    callback(e);
+  }, { passive: false });
+
+  btn.addEventListener("click", (e) => {
+    // Avoid double firing if pointerup already triggered it
+    if (Date.now() - lastTouchTime < 350) return;
+    callback(e);
+  });
+}
+
 function toggleFullscreen() {
   const doc = document.documentElement;
   const isFull = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
@@ -250,19 +270,19 @@ function makeCard(task) {
     openEditModal(task.id);
   });
 
-  // Tapping the card content area opens assignment
+  // Tapping card content opens assignment
   el.querySelector(".card-content").addEventListener("click", e => {
     if (suppressCardClick || e.target.closest(".edit-btn")) return;
     openAssignment(task.id);
   });
 
-  // Desktop Mouse Drag
+  // Mouse Drag Fallback
   el.draggable = true;
   el.addEventListener("dragstart", e => {
     e.dataTransfer.setData("text/plain", String(task.id));
   });
 
-  // Drag System Bound to Left Colored Stripe
+  // Smartboard Drag Handle
   const strip = el.querySelector(".drag-strip");
 
   strip.addEventListener("pointerdown", e => {
@@ -610,6 +630,13 @@ function escapeHtml(s){
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") document.querySelectorAll(".modal-backdrop.open").forEach(x => x.classList.remove("open"));
 });
+
+// Bind top header toolbar buttons with Android smartboard touch fallbacks
+bindTouchButton("fullscreenBtn", toggleFullscreen);
+bindTouchButton("toggleBacklogBtn", toggleBacklog);
+bindTouchButton("refreshBtn", manualRefresh);
+bindTouchButton("claimBtn", openClaim);
+bindTouchButton("settingsBtn", openSettings);
 
 // Boot
 updateBacklogBtn();

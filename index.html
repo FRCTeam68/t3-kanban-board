@@ -8,11 +8,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 
-<header>
+<header id="appHeader">
   <div class="brand">
     <div class="logo-wrap">
       <img 
@@ -27,25 +27,25 @@
     </div>
   </div>
   <div class="toolbar">
-    <button id="fullscreenBtn" onclick="toggleFullscreen()" title="Toggle Fullscreen">⛶ <span class="hide-small">Fullscreen</span></button>
-    <button id="toggleBacklogBtn" onclick="toggleBacklog()"><span class="btn-text">📁 Backlog</span></button>
-    <button id="refreshBtn" onclick="manualRefresh()"><span class="spin-icon">🔄</span> <span class="btn-text">Refresh</span></button>
-    <button class="hide-small" onclick="openClaim()">🙋 What should I do?</button>
-    <button onclick="openSettings()" title="Settings">⚙ <span class="hide-small">Settings</span></button>
+    <button id="fullscreenBtn" title="Toggle Fullscreen">⛶ <span class="hide-small">Fullscreen</span></button>
+    <button id="toggleBacklogBtn"><span class="btn-text">📁 Backlog</span></button>
+    <button id="refreshBtn"><span class="spin-icon">🔄</span> <span class="btn-text">Refresh</span></button>
+    <button id="claimBtn" class="hide-small">🙋 What should I do?</button>
+    <button id="settingsBtn" title="Settings">⚙ <span class="hide-small">Settings</span></button>
   </div>
 </header>
 
-<main>
+<main id="appMain">
   <div id="boardLoader" class="board-loader">
     <div class="spinner"></div>
     <div class="loading-text">Loading...</div>
   </div>
 
   <div class="board" id="board"></div>
-  <div class="footer">
+  <footer class="footer">
     <div class="saved"><span class="dot" id="syncDot"></span><span id="saveStatus">Connecting to Sheets...</span></div>
     <div class="footer-help">Drag left colored bar to move • Swipe list to scroll • Tap to assign • ✏️ to edit</div>
-  </div>
+  </footer>
 </main>
 
 <!-- Edit Task Modal -->
@@ -184,6 +184,6 @@
   </div>
 </div>
 
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>
