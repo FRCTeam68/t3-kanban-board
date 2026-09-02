@@ -218,23 +218,29 @@ function makeCard(task) {
     : "";
 
   el.innerHTML = `
-    <div class="card-top">
-      <div class="drag-handle" title="Hold & drag to move column">⋮⋮</div>
-      <div class="card-title">${escapeHtml(task.title)}</div>
-      <div class="card-header-actions">
-        <button class="edit-btn" title="Edit details">✏️</button>
+    <div class="drag-strip" title="Hold & drag to move column">
+      <div class="drag-strip-icon">
+        <span class="drag-dot"></span>
+        <span class="drag-dot"></span>
+        <span class="drag-dot"></span>
       </div>
     </div>
-    ${task.desc ? `<div class="card-desc">${escapeHtml(task.desc)}</div>` : ""}
-    <div class="meta">
-      <span class="pill">${escapeHtml(task.category)}</span>
-      <span class="pill priority ${task.priority}">${task.priority.toUpperCase()}</span>
-      ${due}
-    </div>
-    ${blockedTag}
-    <div class="people-tags">
-      ${person}
-      ${mentor}
+    <div class="card-content">
+      <div class="card-top">
+        <div class="card-title">${escapeHtml(task.title)}</div>
+        <button class="edit-btn" title="Edit details">✏️</button>
+      </div>
+      ${task.desc ? `<div class="card-desc">${escapeHtml(task.desc)}</div>` : ""}
+      <div class="meta">
+        <span class="pill">${escapeHtml(task.category)}</span>
+        <span class="pill priority ${task.priority}">${task.priority.toUpperCase()}</span>
+        ${due}
+      </div>
+      ${blockedTag}
+      <div class="people-tags">
+        ${person}
+        ${mentor}
+      </div>
     </div>`;
 
   const editBtn = el.querySelector(".edit-btn");
@@ -245,8 +251,8 @@ function makeCard(task) {
   });
 
   // Tapping the card body opens assignment
-  el.addEventListener("click", e => {
-    if (suppressCardClick || e.target.closest(".drag-handle")) return;
+  el.querySelector(".card-content").addEventListener("click", e => {
+    if (suppressCardClick || e.target.closest(".edit-btn")) return;
     openAssignment(task.id);
   });
 
@@ -256,10 +262,10 @@ function makeCard(task) {
     e.dataTransfer.setData("text/plain", String(task.id));
   });
 
-  // Handle-Only Drag System: Touching the handle moves the card; touching the card body scrolls
-  const handle = el.querySelector(".drag-handle");
+  // Handle-Only Drag System on Integrated Strip
+  const strip = el.querySelector(".drag-strip");
 
-  handle.addEventListener("pointerdown", e => {
+  strip.addEventListener("pointerdown", e => {
     if (e.button !== 0 && e.pointerType === "mouse") return;
     e.stopPropagation();
     activeDragCard = el;
@@ -271,10 +277,10 @@ function makeCard(task) {
     dragOffsetX = e.clientX - rect.left;
     dragOffsetY = e.clientY - rect.top;
 
-    try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+    try { strip.setPointerCapture(e.pointerId); } catch (_) {}
   });
 
-  handle.addEventListener("pointermove", e => {
+  strip.addEventListener("pointermove", e => {
     if (!activeDragCard || activeDragCard !== el) return;
     e.stopPropagation();
 
@@ -323,8 +329,8 @@ function makeCard(task) {
     isDraggingActive = false;
   };
 
-  handle.addEventListener("pointerup", endDrag);
-  handle.addEventListener("pointercancel", endDrag);
+  strip.addEventListener("pointerup", endDrag);
+  strip.addEventListener("pointercancel", endDrag);
 
   return el;
 }

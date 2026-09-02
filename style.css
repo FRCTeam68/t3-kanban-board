@@ -169,7 +169,7 @@ main {
 .column[data-status="blocked"] .column-head { border-bottom-color: var(--danger); }
 .column[data-status="done"] .column-head { border-bottom-color: var(--success); }
 
-/* Dropzone with Smooth Scrolling */
+/* Dropzone */
 .dropzone {
   padding: 14px;
   overflow-y: auto;
@@ -178,17 +178,17 @@ main {
   background: #f6f8fb;
   transition: background 0.2s, outline 0.2s;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-y; /* Allows vertical scrolling gesture on touch screens */
+  touch-action: pan-y;
 }
 .dropzone::-webkit-scrollbar {
-  width: 10px;
+  width: 9px;
 }
 .dropzone::-webkit-scrollbar-thumb {
-  background: #c3cad6;
-  border-radius: 5px;
+  background: #ccd3de;
+  border-radius: 6px;
 }
 .dropzone::-webkit-scrollbar-thumb:hover {
-  background: #a2acbd;
+  background: #abb5c4;
 }
 .dropzone.dragover {
   background: #e9eefb;
@@ -201,22 +201,62 @@ main {
 .card {
   position: relative;
   background: #fff;
-  border: 1px solid #d5d9e0;
-  border-left: 8px solid var(--blue);
+  border: 1px solid #d8dce4;
   border-radius: 8px;
-  padding: 14px 16px;
   margin-bottom: 12px;
-  box-shadow: 0 3px 8px rgba(0,0,0,0.08);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.06);
   cursor: pointer;
-  touch-action: pan-y; /* Crucial: lets swipe up/down scroll the column naturally */
+  touch-action: pan-y;
+  display: flex;
+  overflow: hidden;
   transition: box-shadow 0.2s, border-color 0.2s;
 }
 .card:hover {
-  border-color: #abb3c0;
+  border-color: #b8c0cc;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.09);
 }
-.card[data-priority="high"] { border-left-color: var(--orange); }
-.card[data-priority="medium"] { border-left-color: var(--blue); }
-.card[data-priority="low"] { border-left-color: var(--success); }
+
+/* Integrated Drag Strip */
+.drag-strip {
+  width: 22px;
+  flex: 0 0 22px;
+  background: var(--blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  touch-action: none;
+  transition: width 0.15s ease, filter 0.15s ease;
+}
+.drag-strip:hover, .drag-strip:active {
+  width: 26px;
+  filter: brightness(1.1);
+}
+.drag-strip-icon {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  opacity: 0.65;
+  pointer-events: none;
+}
+.drag-dot {
+  width: 4px;
+  height: 4px;
+  background: #fff;
+  border-radius: 50%;
+}
+
+/* Priority Stripes */
+.card[data-priority="high"] .drag-strip { background: var(--orange); }
+.card[data-priority="medium"] .drag-strip { background: var(--blue); }
+.card[data-priority="low"] .drag-strip { background: var(--success); }
+
+/* Card Content Area */
+.card-content {
+  flex: 1;
+  padding: 14px 16px;
+  min-width: 0;
+}
 
 /* Status Card Themes */
 .card[data-status="done"] { background: #edf8f1; border-color: #c0decb; }
@@ -231,37 +271,13 @@ main {
   opacity: 0.3;
 }
 
-/* Dedicated Drag Handle for Smartboard */
-.drag-handle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 38px;
-  min-height: 38px;
-  margin-right: 4px;
-  padding: 2px 6px;
-  font-size: 20px;
-  color: #9299a8;
-  cursor: grab;
-  touch-action: none; /* Prevents scroll ONLY while touching this handle */
-  border-radius: 4px;
-  background: #f4f6fa;
-  border: 1px solid #e1e5ee;
-  transition: all 0.15s;
-}
-.drag-handle:hover, .drag-handle:active {
-  color: var(--blue);
-  background: #e5ecfb;
-  border-color: #c4d4f7;
-}
-
-/* Floating touch drag avatar */
+/* Floating clone */
 .touch-drag-clone {
   position: fixed;
   pointer-events: none;
   z-index: 10000;
   box-shadow: 0 20px 48px rgba(20, 27, 48, 0.35);
-  transform: rotate(2deg) scale(1.03);
+  transform: rotate(2deg) scale(1.02);
   opacity: 0.95;
   border-radius: 8px;
   will-change: transform, left, top;
@@ -275,12 +291,10 @@ main {
   font-family: var(--font-heading);
   line-height: 1.3; margin-bottom: 6px; flex: 1;
 }
-.card-header-actions {
-  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
-}
+
 .edit-btn {
   border: none; background: transparent; padding: 4px;
-  font-size: 18px; color: #8a929f; border-radius: 4px;
+  font-size: 18px; color: #9aa1ad; border-radius: 4px;
   display: grid; place-items: center; line-height: 1;
   min-width: 32px; min-height: 32px;
   transition: all 0.15s;
@@ -502,9 +516,10 @@ input:focus, textarea:focus, select:focus {
   }
 
   .card {
-    padding: 12px;
     margin-bottom: 10px;
-    border-left-width: 6px;
+  }
+  .card-content {
+    padding: 10px 12px;
   }
   .card-title { font-size: 16px; }
   .card-desc { font-size: 13px; }
