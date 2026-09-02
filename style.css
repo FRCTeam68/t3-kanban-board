@@ -22,7 +22,7 @@ html, body {
   padding: 0;
   width: 100vw;
   height: 100vh;
-  height: 100dvh; /* Dynamic viewport height eliminates Android browser bar overflow */
+  height: 100dvh;
   font-family: var(--font-body);
   background: var(--bg);
   color: var(--text);
@@ -30,28 +30,35 @@ html, body {
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   -webkit-user-select: none;
-  overflow: hidden; /* Lock entire page from outer scrolling */
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
 button, input, select, textarea { font-family: var(--font-body); font-size: 1rem; }
-button { cursor: pointer; touch-action: manipulation; }
 
-/* Top Bar */
+/* Top Bar: Safe from Android Top Swipe Gestures */
 header {
   position: relative;
-  z-index: 1000; /* Ensure header always sits above full-screen canvases */
-  height: 90px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 24px;
+  z-index: 1000;
+  height: 96px;
+  /* Top padding ensures buttons sit below Android OS gesture-capture zone */
+  padding: 16px 24px 10px;
   background: var(--blue);
   border-bottom: 5px solid var(--orange);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
+}
+
+/* Fullscreen mode adjustment: push header down an extra 10px so OS edge-swipes don't block clicks */
+:fullscreen header,
+:-webkit-full-screen header {
+  padding-top: 22px;
+  height: 106px;
 }
 
 .brand { display: flex; align-items: center; gap: 16px; min-width: 0; flex: 1; pointer-events: none; }
@@ -80,6 +87,7 @@ h1 {
   align-items: center;
   flex-shrink: 0;
   z-index: 1001;
+  pointer-events: auto !important;
 }
 
 .toolbar button {
@@ -99,6 +107,8 @@ h1 {
   gap: 6px;
   white-space: nowrap;
   touch-action: manipulation;
+  cursor: pointer;
+  pointer-events: auto !important;
 }
 .toolbar button:active {
   background: #e6ecf8;
@@ -109,7 +119,7 @@ h1 {
 .spinning .spin-icon { animation: rotate 0.8s linear infinite; }
 @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-/* Main Workspace: Fills remaining screen perfectly */
+/* Main Workspace */
 main {
   position: relative;
   flex: 1 1 auto;
@@ -155,7 +165,7 @@ main {
   display: grid;
   gap: 14px;
   flex: 1 1 auto;
-  min-height: 0; /* Prevents container from stretching past viewport */
+  min-height: 0;
   height: 100%;
 }
 
@@ -375,7 +385,7 @@ main {
   will-change: transform, left, top;
 }
 
-/* Footer: Locked at bottom of viewport */
+/* Footer */
 .footer {
   height: 36px;
   display: flex;

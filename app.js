@@ -31,35 +31,44 @@ function setSyncStatus(state, msg) {
   txt.textContent = msg;
 }
 
-// Touch-safe button listener binder (handles touch and mouse cleanly on Android boards)
-function bindTouchButton(elementId, callback) {
-  const btn = document.getElementById(elementId);
-  if (!btn) return;
+// Fullscreen-Proof Universal Tap Binder
+function bindSmartboardTap(elementId, actionFn) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
 
-  let lastTouchTime = 0;
+  let touchTriggered = 0;
 
-  btn.addEventListener("pointerup", (e) => {
+  // 1. Catches touch directly even if Android gestures absorb mouse emulation
+  el.addEventListener("touchend", (e) => {
+    e.preventDefault();
     e.stopPropagation();
-    lastTouchTime = Date.now();
-    callback(e);
+    touchTriggered = Date.now();
+    actionFn();
   }, { passive: false });
 
-  btn.addEventListener("click", (e) => {
-    // Avoid double firing if pointerup already triggered it
-    if (Date.now() - lastTouchTime < 350) return;
-    callback(e);
+  // 2. Catches optical touch frame pointer events
+  el.addEventListener("pointerup", (e) => {
+    if (Date.now() - touchTriggered < 300) return;
+    touchTriggered = Date.now();
+    actionFn();
+  });
+
+  // 3. Fallback standard click
+  el.addEventListener("click", (e) => {
+    if (Date.now() - touchTriggered < 300) return;
+    actionFn();
   });
 }
 
 function toggleFullscreen() {
-  const doc = document.documentElement;
+  const root = document.getElementById("appRoot") || document.documentElement;
   const isFull = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
   
   if (!isFull) {
-    if (doc.requestFullscreen) doc.requestFullscreen();
-    else if (doc.webkitRequestFullscreen) doc.webkitRequestFullscreen();
-    else if (doc.mozRequestFullScreen) doc.mozRequestFullScreen();
-    else if (doc.msRequestFullscreen) doc.msRequestFullscreen();
+    if (root.requestFullscreen) root.requestFullscreen();
+    else if (root.webkitRequestFullscreen) root.webkitRequestFullscreen();
+    else if (root.mozRequestFullScreen) root.mozRequestFullScreen();
+    else if (root.msRequestFullscreen) root.msRequestFullscreen();
   } else {
     if (document.exitFullscreen) document.exitFullscreen();
     else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
@@ -270,19 +279,16 @@ function makeCard(task) {
     openEditModal(task.id);
   });
 
-  // Tapping card content opens assignment
   el.querySelector(".card-content").addEventListener("click", e => {
     if (suppressCardClick || e.target.closest(".edit-btn")) return;
     openAssignment(task.id);
   });
 
-  // Mouse Drag Fallback
   el.draggable = true;
   el.addEventListener("dragstart", e => {
     e.dataTransfer.setData("text/plain", String(task.id));
   });
 
-  // Smartboard Drag Handle
   const strip = el.querySelector(".drag-strip");
 
   strip.addEventListener("pointerdown", e => {
@@ -631,12 +637,12 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape") document.querySelectorAll(".modal-backdrop.open").forEach(x => x.classList.remove("open"));
 });
 
-// Bind top header toolbar buttons with Android smartboard touch fallbacks
-bindTouchButton("fullscreenBtn", toggleFullscreen);
-bindTouchButton("toggleBacklogBtn", toggleBacklog);
-bindTouchButton("refreshBtn", manualRefresh);
-bindTouchButton("claimBtn", openClaim);
-bindTouchButton("settingsBtn", openSettings);
+// Bind all toolbar buttons using the smartboard tap handler
+bindSmartboardTap("fullscreenBtn", toggleFullscreen);
+bindSmartboardTap("toggleBacklogBtn", toggleBacklog);
+bindSmartboardTap("refreshBtn", manualRefresh);
+bindSmartboardTap("claimBtn", openClaim);
+bindSmartboardTap("settingsBtn", openSettings);
 
 // Boot
 updateBacklogBtn();
