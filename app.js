@@ -249,4 +249,390 @@ function makeCard(task) {
       ${task.desc ? `<div class="card-desc">${escapeHtml(task.desc)}</div>` : ""}
       <div class="meta">
         <span class="pill">${escapeHtml(task.category)}</span>
-        <span class="pill priority ${task.priority}">${task.priority.toUpperCase()}</span>${due}
+        <span class="pill priority ${task.priority}">${task.priority.toUpperCase()}</span>
+        ${due}
+      </div>
+      ${blockedTag}
+      <div class="people-tags">
+        ${person}
+        ${mentor}
+      </div>
+    </div>`;
+
+  const editBtn = el.querySelector(".edit-btn");
+  editBtn.addEventListener("pointerdown", e => {
+    e.stopPropagation();
+    openEditModal(task.id);
+  });
+
+  el.querySelector(".card-content").addEventListener("click", e => {
+    if (suppressCardClick || e.target.closest(".edit-btn")) return;
+    openAssignment(task.id);
+  });
+
+  // Native mouse drag fallback
+  el.draggable = true;
+  el.addEventListener("dragstart", e => {
+    e.dataTransfer.setData("text/plain", String(task.id));
+  });
+
+  // Touch Drag Engine
+  const strip = el.querySelector(".drag-strip");
+
+  strip.addEventListener("pointerdown", e => {
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    e.stopPropagation();
+    activeDragCard = el;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    isDraggingActive = false;
+
+    const rect = el.getBoundingClientRect();
+    dragOffsetX = e.clientX - rect.left;
+    dragOffsetY = e.clientY - rect.top;
+
+    try { strip.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+
+  strip.addEventListener("pointermove", e => {
+    if (!activeDragCard || activeDragCard !== el) return;
+    e.stopPropagation();
+
+    const dist = Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY);
+    if (!isDraggingActive && dist > 6) {
+      isDraggingActive = true;
+      suppressCardClick = true;
+      el.classList.add("dragging-origin");
+
+      if (!touchClone) {
+        touchClone = el.cloneNode(true);
+        touchClone.className = el.className + " touch-drag-clone";
+        touchClone.style.width = el.offsetWidth + "px";
+        touchClone.style.left = (e.clientX - dragOffsetX) + "px";
+        touchClone.style.top = (e.clientY - dragOffsetY) + "px";
+        document.body.appendChild(touchClone);
+      }
+    }
+
+    if (isDraggingActive && touchClone) {
+      touchClone.style.left = (e.clientX - dragOffsetX) + "px";
+      touchClone.style.top = (e.clientY - dragOffsetY) + "px";
+      highlightDrop(e.clientX, e.clientY);
+    }
+  });
+
+  const endDrag = e => {
+    if (!activeDragCard || activeDragCard !== el) return;
+    e.stopPropagation();
+
+    if (isDraggingActive) {
+      const dropTarget = document.elementFromPoint(e.clientX, e.clientY)?.closest(".dropzone");
+      if (dropTarget) {
+        moveTask(task.id, dropTarget.dataset.status);
+      }
+      setTimeout(() => { suppressCardClick = false; }, 80);
+    }
+
+    if (touchClone) {
+      touchClone.remove();
+      touchClone = null;
+    }
+    el.classList.remove("dragging-origin");
+    document.querySelectorAll(".dropzone").forEach(z => z.classList.remove("dragover"));
+    activeDragCard = null;
+    isDraggingActive = false;
+  };
+
+  strip.addEventListener("pointerup", endDrag);
+  strip.addEventListener("pointercancel", endDrag);
+
+  return el;
+}
+
+function highlightDrop(x, y) {
+  document.querySelectorAll(".dropzone").forEach(z => z.classList.remove("dragover"));
+  const z = document.elementFromPoint(x, y)?.closest(".dropzone");
+  if (z) z.classList.add("dragover");
+}
+
+function moveTask(id, status) {
+  const task = data.tasks.find(t => t.id === id);
+  if (!task || task.status === status) { render(); return; }
+  
+  if (status === "blocked") {
+    openBlockerPrompt(id);
+    return;
+  }
+
+  if (task.status === "blocked" && status !== "blocked") {
+    task.blockedBy = "";
+  }
+
+  task.status = status;
+  render();
+  syncToSheets("update", task);
+  if (status === "progress" && !task.assignee) openAssignment(id);
+}
+
+// Blocker Prompt Modal Handlers
+function openBlockerPrompt(id) {
+  const task = data.tasks.find(t => t.id === id);
+  if (!task) return;
+  pendingBlockTaskId = id;
+
+  document.getElementById("blockerTaskSummary").innerHTML = `
+    <strong>${escapeHtml(task.title)}</strong>
+    <span>${escapeHtml(task.category)} • ${task.priority.toUpperCase()} priority</span>`;
+
+  const bSelect = document.getElementById("promptBlockedBySelect");
+  bSelect.innerHTML = '<option value="">-- None / External Issue --</option>';
+  
+  data.tasks.filter(x => x.id !== id && x.status !== "done").forEach(other => {
+    const opt = document.createElement("option");
+    opt.value = other.title;
+    opt.textContent = other.title + " (" + other.category + ")";
+    if (task.blockedBy === other.title) opt.selected = true;
+    bSelect.appendChild(opt);
+  });
+
+  openModal("blockerPromptModal");
+}
+
+function confirmBlockerPrompt() {
+  const task = data.tasks.find(t => t.id === pendingBlockTaskId);
+  if (task) {
+    task.status = "blocked";
+    task.blockedBy = document.getElementById("promptBlockedBySelect").value;
+    render();
+    syncToSheets("update", task);
+  }
+  closeModal("blockerPromptModal");
+  pendingBlockTaskId = null;
+}
+
+function cancelBlockerPrompt() {
+  closeModal("blockerPromptModal");
+  pendingBlockTaskId = null;
+  render();
+}
+
+// Assignment Modal
+function openAssignment(id) {
+  const task = data.tasks.find(t => t.id === id);
+  if (!task) return;
+  activeTaskId = id;
+  
+  pendingAssignees = task.assignee 
+    ? task.assignee.split(",").map(s => s.trim()).filter(Boolean)
+    : [];
+  pendingMentor = task.mentor || "";
+
+  document.getElementById("assignTaskSummary").innerHTML = `
+    <strong>${escapeHtml(task.title)}</strong>
+    <span>${escapeHtml(task.category)} • ${task.priority.toUpperCase()} priority</span>`;
+
+  renderStudentButtons();
+  renderMentorButtons();
+
+  openModal("assignModal");
+}
+
+function renderStudentButtons() {
+  const sWrap = document.getElementById("studentButtons");
+  sWrap.innerHTML = "";
+  
+  data.students.forEach(name => {
+    const isSelected = pendingAssignees.includes(name);
+    const b = document.createElement("button");
+    b.className = "person-btn" + (isSelected ? " selected" : "");
+    b.textContent = name;
+    b.onclick = () => {
+      if (pendingAssignees.includes(name)) {
+        pendingAssignees = pendingAssignees.filter(n => n !== name);
+      } else {
+        pendingAssignees.push(name);
+      }
+      renderStudentButtons();
+    };
+    sWrap.appendChild(b);
+  });
+
+  const clearBtn = document.createElement("button");
+  clearBtn.className = "person-btn" + (pendingAssignees.length === 0 ? " selected" : "");
+  clearBtn.textContent = "Clear All";
+  clearBtn.onclick = () => {
+    pendingAssignees = [];
+    renderStudentButtons();
+  };
+  sWrap.appendChild(clearBtn);
+}
+
+function renderMentorButtons() {
+  const mWrap = document.getElementById("mentorButtons");
+  mWrap.innerHTML = "";
+
+  data.mentors.forEach(name => {
+    const b = document.createElement("button");
+    b.className = "person-btn" + (pendingMentor === name ? " selected" : "");
+    b.textContent = name;
+    b.onclick = () => {
+      pendingMentor = name;
+      renderMentorButtons();
+    };
+    mWrap.appendChild(b);
+  });
+
+  const unMentor = document.createElement("button");
+  unMentor.className = "person-btn" + (!pendingMentor ? " selected" : "");
+  unMentor.textContent = "None";
+  unMentor.onclick = () => {
+    pendingMentor = "";
+    renderMentorButtons();
+  };
+  mWrap.appendChild(unMentor);
+}
+
+function confirmAssignment() {
+  const task = data.tasks.find(x => x.id === activeTaskId);
+  if (task) {
+    task.assignee = pendingAssignees.join(", ");
+    task.mentor = pendingMentor;
+    render();
+    syncToSheets("update", task);
+  }
+  closeModal("assignModal");
+}
+
+function toggleBlockedByField() {
+  const status = document.getElementById("editStatus").value;
+  document.getElementById("blockedByContainer").style.display = status === "blocked" ? "flex" : "none";
+}
+
+function openEditModal(id) {
+  const t = data.tasks.find(x => x.id === id);
+  if (!t) return;
+  activeTaskId = id;
+  document.getElementById("editTitle").value = t.title;
+  document.getElementById("editDesc").value = t.desc || "";
+  document.getElementById("editCategory").value = t.category;
+  document.getElementById("editPriority").value = t.priority;
+  
+  let dateVal = "";
+  if (t.due) {
+    const d = new Date(t.due);
+    if (!isNaN(d.getTime())) {
+      dateVal = d.toISOString().split("T")[0];
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(t.due)) {
+      dateVal = t.due;
+    }
+  }
+  document.getElementById("editDue").value = dateVal;
+  document.getElementById("editStatus").value = t.status;
+
+  const bSelect = document.getElementById("editBlockedBy");
+  bSelect.innerHTML = '<option value="">-- None / External Block --</option>';
+  data.tasks.filter(x => x.id !== id && x.status !== "done").forEach(other => {
+    const opt = document.createElement("option");
+    opt.value = other.title;
+    opt.textContent = other.title + " (" + other.category + ")";
+    if (t.blockedBy === other.title) opt.selected = true;
+    bSelect.appendChild(opt);
+  });
+
+  toggleBlockedByField();
+  openModal("editModal");
+}
+
+function saveTaskDetails() {
+  const title = document.getElementById("editTitle").value.trim();
+  if (!title) { alert("Please enter a title."); return; }
+  const t = data.tasks.find(x => x.id === activeTaskId);
+  if (t) {
+    t.title = title;
+    t.desc = document.getElementById("editDesc").value.trim();
+    t.category = document.getElementById("editCategory").value;
+    t.priority = document.getElementById("editPriority").value;
+    t.due = document.getElementById("editDue").value;
+    t.status = document.getElementById("editStatus").value;
+    t.blockedBy = t.status === "blocked" ? document.getElementById("editBlockedBy").value : "";
+    render();
+    syncToSheets("update", t);
+  }
+  closeModal("editModal");
+}
+
+function deleteTask() {
+  if (!activeTaskId) return;
+  if (confirm("Delete this task?")) {
+    const idToDelete = activeTaskId;
+    data.tasks = data.tasks.filter(t => t.id !== idToDelete);
+    render();
+    syncToSheets("delete", idToDelete);
+    closeModal("editModal");
+  }
+}
+
+function openClaim() {
+  const available = data.tasks.filter(t => t.status === "todo" || t.status === "backlog");
+  const sorted = sortTasks(available);
+  const content = document.getElementById("claimContent");
+  if (!sorted.length) {
+    content.innerHTML = '<div class="empty">Nothing open right now. Great job! 🎉</div>';
+  } else {
+    content.innerHTML = sorted.slice(0, 8).map(t => `
+      <div class="claim-card" style="cursor:pointer" onclick="closeModal('claimModal'); moveTask(${t.id},'progress')">
+        <strong>${escapeHtml(t.title)}</strong>
+        <span>${escapeHtml(t.category)} • ${(t.priority||'medium').toUpperCase()} priority${t.mentor ? " • Mentor: " + escapeHtml(t.mentor) : ""}</span>
+      </div>`).join("");
+  }
+  openModal("claimModal");
+}
+
+function openSettings() {
+  document.getElementById("apiUrlInput").value = API_URL;
+  document.getElementById("pollIntervalSelect").value = String(pollInterval);
+  openModal("settingsModal");
+}
+
+function saveSettings() {
+  const url = document.getElementById("apiUrlInput").value.trim();
+  const interval = Number(document.getElementById("pollIntervalSelect").value);
+  API_URL = url;
+  pollInterval = interval;
+  localStorage.setItem("ttt_sheets_api_url", url);
+  localStorage.setItem("ttt_poll_interval", String(interval));
+  resetPollTimer();
+  fetchTasksFromSheets(true);
+  closeModal("settingsModal");
+}
+
+function openModal(id){ document.getElementById(id).classList.add("open"); }
+function closeModal(id){ document.getElementById(id).classList.remove("open"); }
+document.querySelectorAll(".modal-backdrop").forEach(b => b.addEventListener("pointerdown", e => { if (e.target === b) b.classList.remove("open"); }));
+
+function formatDate(s) {
+  if (!s) return "";
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return String(s);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+function escapeHtml(s){
+  return String(s ?? "").replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") document.querySelectorAll(".modal-backdrop.open").forEach(x => x.classList.remove("open"));
+});
+
+// Bind top header toolbar buttons with low-latency pointerdown handlers
+bindInstantTap("fullscreenBtn", toggleFullscreen);
+bindInstantTap("toggleBacklogBtn", toggleBacklog);
+bindInstantTap("refreshBtn", manualRefresh);
+bindInstantTap("claimBtn", openClaim);
+bindInstantTap("settingsBtn", openSettings);
+
+// Boot
+updateBacklogBtn();
+fetchTasksFromSheets(false);
+resetPollTimer();
