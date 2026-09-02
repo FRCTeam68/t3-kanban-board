@@ -218,8 +218,8 @@ function makeCard(task) {
     : "";
 
   el.innerHTML = `
-    <div class="drag-strip" title="Hold & drag to move column">
-      <div class="drag-strip-icon">
+    <div class="drag-strip" title="Hold & drag to move">
+      <div class="drag-strip-dots">
         <span class="drag-dot"></span>
         <span class="drag-dot"></span>
         <span class="drag-dot"></span>
@@ -250,7 +250,7 @@ function makeCard(task) {
     openEditModal(task.id);
   });
 
-  // Tapping the card body opens assignment
+  // Tapping the card content area opens assignment
   el.querySelector(".card-content").addEventListener("click", e => {
     if (suppressCardClick || e.target.closest(".edit-btn")) return;
     openAssignment(task.id);
@@ -262,7 +262,7 @@ function makeCard(task) {
     e.dataTransfer.setData("text/plain", String(task.id));
   });
 
-  // Handle-Only Drag System on Integrated Strip
+  // Drag System Bound to Left Colored Stripe
   const strip = el.querySelector(".drag-strip");
 
   strip.addEventListener("pointerdown", e => {

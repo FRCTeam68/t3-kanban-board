@@ -169,7 +169,7 @@ main {
 .column[data-status="blocked"] .column-head { border-bottom-color: var(--danger); }
 .column[data-status="done"] .column-head { border-bottom-color: var(--success); }
 
-/* Dropzone */
+/* Dropzone with Smooth Scroll */
 .dropzone {
   padding: 14px;
   overflow-y: auto;
@@ -181,7 +181,7 @@ main {
   touch-action: pan-y;
 }
 .dropzone::-webkit-scrollbar {
-  width: 9px;
+  width: 10px;
 }
 .dropzone::-webkit-scrollbar-thumb {
   background: #ccd3de;
@@ -197,11 +197,11 @@ main {
   border-radius: 6px;
 }
 
-/* Cards */
+/* Cards: Flex row containing the Left Stripe and the Content */
 .card {
   position: relative;
   background: #fff;
-  border: 1px solid #d8dce4;
+  border: 1px solid #d5d9e0;
   border-radius: 8px;
   margin-bottom: 12px;
   box-shadow: 0 3px 8px rgba(0,0,0,0.06);
@@ -212,14 +212,13 @@ main {
   transition: box-shadow 0.2s, border-color 0.2s;
 }
 .card:hover {
-  border-color: #b8c0cc;
-  box-shadow: 0 6px 14px rgba(0,0,0,0.09);
+  border-color: #abb3c0;
 }
 
-/* Integrated Drag Strip */
+/* Left Vertical Priority Stripe with Integrated Grip Pattern */
 .drag-strip {
-  width: 22px;
-  flex: 0 0 22px;
+  width: 20px;
+  flex: 0 0 20px;
   background: var(--blue);
   display: flex;
   align-items: center;
@@ -229,36 +228,36 @@ main {
   transition: width 0.15s ease, filter 0.15s ease;
 }
 .drag-strip:hover, .drag-strip:active {
-  width: 26px;
+  width: 24px;
   filter: brightness(1.1);
 }
-.drag-strip-icon {
+.drag-strip-dots {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  opacity: 0.65;
+  gap: 4px;
+  opacity: 0.75;
   pointer-events: none;
 }
 .drag-dot {
   width: 4px;
   height: 4px;
-  background: #fff;
+  background: #ffffff;
   border-radius: 50%;
 }
 
-/* Priority Stripes */
+/* Priority Color Mapping for the Stripe */
 .card[data-priority="high"] .drag-strip { background: var(--orange); }
 .card[data-priority="medium"] .drag-strip { background: var(--blue); }
 .card[data-priority="low"] .drag-strip { background: var(--success); }
 
-/* Card Content Area */
+/* Main Card Content Container */
 .card-content {
   flex: 1;
   padding: 14px 16px;
   min-width: 0;
 }
 
-/* Status Card Themes */
+/* Status Themes */
 .card[data-status="done"] { background: #edf8f1; border-color: #c0decb; }
 .card[data-status="blocked"] { background: #fdf0f0; border-color: #f5c2c6; }
 
@@ -271,35 +270,45 @@ main {
   opacity: 0.3;
 }
 
-/* Floating clone */
-.touch-drag-clone {
-  position: fixed;
-  pointer-events: none;
-  z-index: 10000;
-  box-shadow: 0 20px 48px rgba(20, 27, 48, 0.35);
-  transform: rotate(2deg) scale(1.02);
-  opacity: 0.95;
-  border-radius: 8px;
-  will-change: transform, left, top;
+/* Header within Card Content */
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
-.card-top {
-  display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
-}
 .card-title {
-  color: #1a1e24; font-size: 18px; font-weight: 700;
+  color: #1a1e24;
+  font-size: 18px;
+  font-weight: 700;
   font-family: var(--font-heading);
-  line-height: 1.3; margin-bottom: 6px; flex: 1;
+  line-height: 1.3;
+  margin: 0;
+  flex: 1;
 }
 
 .edit-btn {
-  border: none; background: transparent; padding: 4px;
-  font-size: 18px; color: #9aa1ad; border-radius: 4px;
-  display: grid; place-items: center; line-height: 1;
-  min-width: 32px; min-height: 32px;
-  transition: all 0.15s;
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+  font-size: 18px;
+  color: #8a929f;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  min-width: 28px;
+  min-height: 28px;
+  transition: all 0.15s ease;
 }
-.edit-btn:hover { color: var(--blue); background: #eaf0fc; transform: scale(1.15); }
+.edit-btn:hover {
+  color: var(--blue);
+  background: #eaf0fc;
+  transform: scale(1.15);
+}
 
 .card-desc {
   color: #4b525d; font-size: 15px; line-height: 1.4;
@@ -326,6 +335,17 @@ main {
 .empty {
   color: #989ea8; text-align: center;
   padding: 24px 12px; font-size: 15px;
+}
+
+.touch-drag-clone {
+  position: fixed;
+  pointer-events: none;
+  z-index: 10000;
+  box-shadow: 0 20px 48px rgba(20, 27, 48, 0.35);
+  transform: rotate(2deg) scale(1.02);
+  opacity: 0.95;
+  border-radius: 8px;
+  will-change: transform, left, top;
 }
 
 .footer {
