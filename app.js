@@ -15,12 +15,50 @@ let pendingBlockTaskId = null;
 let suppressCardClick = false;
 let pollTimer = null;
 
+// Touch Drag System
+let activeDragCard = null;
+let touchClone = null;
+let dragStartX = 0;
+let dragStartY = 0;
+let dragOffsetX = 0;
+let dragOffsetY = 0;
+let isDraggingActive = false;
+
 function setSyncStatus(state, msg) {
   const dot = document.getElementById("syncDot");
   const txt = document.getElementById("saveStatus");
   dot.className = "dot " + (state === "syncing" ? "syncing" : state === "error" ? "error" : "");
   txt.textContent = msg;
 }
+
+function toggleFullscreen() {
+  const doc = document.documentElement;
+  const isFull = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+  
+  if (!isFull) {
+    if (doc.requestFullscreen) doc.requestFullscreen();
+    else if (doc.webkitRequestFullscreen) doc.webkitRequestFullscreen();
+    else if (doc.mozRequestFullScreen) doc.mozRequestFullScreen();
+    else if (doc.msRequestFullscreen) doc.msRequestFullscreen();
+  } else {
+    if (document.exitFullscreen) document.exitFullscreen();
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
+    else if (document.msExitFullscreen) document.msExitFullscreen();
+  }
+}
+
+function updateFullscreenBtn() {
+  const btn = document.getElementById("fullscreenBtn");
+  if (!btn) return;
+  const isFull = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+  btn.innerHTML = isFull 
+    ? `🗗 <span class="hide-small">Exit</span>` 
+    : `⛶ <span class="hide-small">Fullscreen</span>`;
+}
+
+document.addEventListener("fullscreenchange", updateFullscreenBtn);
+document.addEventListener("webkitfullscreenchange", updateFullscreenBtn);
 
 function toggleBacklog() {
   showBacklog = !showBacklog;
@@ -31,17 +69,21 @@ function toggleBacklog() {
 
 function updateBacklogBtn() {
   const btn = document.getElementById("toggleBacklogBtn");
-  if (btn) btn.textContent = showBacklog ? "📂 Hide Backlog" : "📁 Show Backlog";
+  if (btn) {
+    const textSpan = btn.querySelector(".btn-text");
+    if (textSpan) {
+      textSpan.textContent = showBacklog ? "📂 Backlog" : "📁 Backlog";
+    } else {
+      btn.textContent = showBacklog ? "📂 Backlog" : "📁 Backlog";
+    }
+  }
 }
 
 function hideLoader() {
   const loader = document.getElementById("boardLoader");
-  if (loader) {
-    loader.classList.add("hidden");
-  }
+  if (loader) loader.classList.add("hidden");
 }
 
-// Multi-level column sorting: Due Date (ascending) -> Priority (High -> Med -> Low)
 function sortTasks(taskList) {
   const prioWeight = { high: 0, medium: 1, low: 2 };
   return [...taskList].sort((a, b) => {
@@ -59,7 +101,6 @@ function sortTasks(taskList) {
   });
 }
 
-// Fetch tasks and people from Google Sheet
 async function fetchTasksFromSheets(isManual = false) {
   if (!API_URL || API_URL.includes("YOUR_APPS_SCRIPT")) {
     setSyncStatus("error", "Add Google Apps Script URL in Settings (⚙)");
@@ -83,7 +124,7 @@ async function fetchTasksFromSheets(isManual = false) {
     setSyncStatus("error", "Sync failed • Check connection");
   } finally {
     if (btn) btn.classList.remove("spinning");
-    hideLoader(); // Always dismiss loading overlay once first network round-trip concludes
+    hideLoader();
   }
 }
 
@@ -98,7 +139,6 @@ function resetPollTimer() {
   }
 }
 
-// Push updates to Google Sheet
 async function syncToSheets(action, taskOrId) {
   if (!API_URL || API_URL.includes("YOUR_APPS_SCRIPT")) return;
   setSyncStatus("syncing", "Saving change...");
@@ -147,6 +187,7 @@ function render() {
         ${tasks.length ? "" : '<div class="empty">Drop tasks here</div>'}
       </div>`;
     board.appendChild(col);
+
     const zone = col.querySelector(".dropzone");
     zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("dragover"); });
     zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
@@ -155,6 +196,7 @@ function render() {
       const id = Number(e.dataTransfer.getData("text/plain"));
       moveTask(id, status);
     });
+
     tasks.forEach(task => zone.appendChild(makeCard(task)));
   });
 }
@@ -162,7 +204,6 @@ function render() {
 function makeCard(task) {
   const el = document.createElement("article");
   el.className = "card";
-  el.draggable = true;
   el.dataset.id = task.id;
   el.dataset.priority = task.priority;
   el.dataset.status = task.status;
@@ -194,7 +235,8 @@ function makeCard(task) {
     </div>`;
 
   const editBtn = el.querySelector(".edit-btn");
-  editBtn.addEventListener("click", (e) => {
+  editBtn.addEventListener("pointerdown", e => e.stopPropagation());
+  editBtn.addEventListener("click", e => {
     e.stopPropagation();
     openEditModal(task.id);
   });
@@ -204,43 +246,84 @@ function makeCard(task) {
     openAssignment(task.id);
   });
 
+  // Desktop Mouse Drag
+  el.draggable = true;
   el.addEventListener("dragstart", e => {
     e.dataTransfer.setData("text/plain", String(task.id));
-    el.classList.add("dragging");
   });
-  el.addEventListener("dragend", () => el.classList.remove("dragging"));
-  
-  let startX=0, startY=0, moved=false;
+
+  // Touch / Smartboard Pointer Drag Engine
   el.addEventListener("pointerdown", e => {
-    if (e.pointerType === "mouse") return;
-    startX=e.clientX; startY=e.clientY; moved=false;
-    try { el.setPointerCapture(e.pointerId); } catch(_){}
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    activeDragCard = el;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    isDraggingActive = false;
+
+    const rect = el.getBoundingClientRect();
+    dragOffsetX = e.clientX - rect.left;
+    dragOffsetY = e.clientY - rect.top;
+
+    try { el.setPointerCapture(e.pointerId); } catch (_) {}
   });
+
   el.addEventListener("pointermove", e => {
-    if (e.pointerType === "mouse") return;
-    if (Math.hypot(e.clientX-startX,e.clientY-startY) > 18) {
-      moved=true;
-      el.style.opacity="0.55";
-      highlightDrop(e.clientX,e.clientY);
+    if (!activeDragCard || activeDragCard !== el) return;
+
+    const dist = Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY);
+    if (!isDraggingActive && dist > 10) {
+      isDraggingActive = true;
+      suppressCardClick = true;
+      el.classList.add("dragging-origin");
+
+      // Spawn floating visual card directly attached to the finger
+      if (!touchClone) {
+        touchClone = el.cloneNode(true);
+        touchClone.className = el.className + " touch-drag-clone";
+        touchClone.style.width = el.offsetWidth + "px";
+        touchClone.style.left = (e.clientX - dragOffsetX) + "px";
+        touchClone.style.top = (e.clientY - dragOffsetY) + "px";
+        document.body.appendChild(touchClone);
+      }
+    }
+
+    if (isDraggingActive && touchClone) {
+      touchClone.style.left = (e.clientX - dragOffsetX) + "px";
+      touchClone.style.top = (e.clientY - dragOffsetY) + "px";
+      highlightDrop(e.clientX, e.clientY);
     }
   });
-  el.addEventListener("pointerup", e => {
-    if (e.pointerType === "mouse") return;
-    el.style.opacity="";
-    if (moved) {
-      suppressCardClick=true;
-      const target = document.elementFromPoint(e.clientX,e.clientY)?.closest(".dropzone");
-      if (target) moveTask(task.id, target.dataset.status);
-      setTimeout(()=>suppressCardClick=false, 120);
+
+  const endDrag = e => {
+    if (!activeDragCard || activeDragCard !== el) return;
+
+    if (isDraggingActive) {
+      const dropTarget = document.elementFromPoint(e.clientX, e.clientY)?.closest(".dropzone");
+      if (dropTarget) {
+        moveTask(task.id, dropTarget.dataset.status);
+      }
+      setTimeout(() => { suppressCardClick = false; }, 140);
     }
-  });
+
+    if (touchClone) {
+      touchClone.remove();
+      touchClone = null;
+    }
+    el.classList.remove("dragging-origin");
+    document.querySelectorAll(".dropzone").forEach(z => z.classList.remove("dragover"));
+    activeDragCard = null;
+    isDraggingActive = false;
+  };
+
+  el.addEventListener("pointerup", endDrag);
+  el.addEventListener("pointercancel", endDrag);
 
   return el;
 }
 
-function highlightDrop(x,y) {
+function highlightDrop(x, y) {
   document.querySelectorAll(".dropzone").forEach(z => z.classList.remove("dragover"));
-  const z = document.elementFromPoint(x,y)?.closest(".dropzone");
+  const z = document.elementFromPoint(x, y)?.closest(".dropzone");
   if (z) z.classList.add("dragover");
 }
 
@@ -305,7 +388,7 @@ function cancelBlockerPrompt() {
   render();
 }
 
-// Assignment Modal (Multiple Students + Mentor)
+// Assignment Modal
 function openAssignment(id) {
   const task = data.tasks.find(t => t.id === id);
   if (!task) return;
@@ -514,7 +597,7 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape") document.querySelectorAll(".modal-backdrop.open").forEach(x => x.classList.remove("open"));
 });
 
-// Boot, initialize UI state, & start background poll
+// Boot
 updateBacklogBtn();
 fetchTasksFromSheets(false);
 resetPollTimer();
