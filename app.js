@@ -10,10 +10,19 @@ let data = {
 
 let activeTaskId = null;
 let pendingAssignees = [];
-let pendingMentor = null;
+let pendingMentors = [];
 let pendingBlockTaskId = null;
 let suppressCardClick = false;
 let pollTimer = null;
+
+// Touch Drag System
+let activeDragCard = null;
+let touchClone = null;
+let dragStartX = 0;
+let dragStartY = 0;
+let dragOffsetX = 0;
+let dragOffsetY = 0;
+let isDraggingActive = false;
 
 function setSyncStatus(state, msg) {
   const dot = document.getElementById("syncDot");
@@ -21,6 +30,51 @@ function setSyncStatus(state, msg) {
   dot.className = "dot " + (state === "syncing" ? "syncing" : state === "error" ? "error" : "");
   txt.textContent = msg;
 }
+
+// Instant trigger for low-latency touch response
+function bindInstantTap(elId, fn) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+
+  el.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    fn();
+  }, { passive: false });
+}
+
+// Fullscreen Toggle
+function toggleFullscreen() {
+  const isFull = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+  
+  if (!isFull) {
+    const root = document.documentElement;
+    if (root.requestFullscreen) {
+      root.requestFullscreen().catch(() => {});
+    } else if (root.webkitRequestFullscreen) {
+      root.webkitRequestFullscreen();
+    }
+  } else {
+    if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    }
+  }
+}
+
+function updateFullscreenBtn() {
+  const btn = document.getElementById("fullscreenBtn");
+  if (!btn) return;
+  const isFull = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+  btn.innerHTML = isFull 
+    ? `✕ <span class="hide-small">Exit</span>` 
+    : `⛶ <span class="hide-small">Fullscreen</span>`;
+}
+
+document.addEventListener("fullscreenchange", updateFullscreenBtn);
+document.addEventListener("webkitfullscreenchange", updateFullscreenBtn);
 
 function toggleBacklog() {
   showBacklog = !showBacklog;
@@ -31,17 +85,21 @@ function toggleBacklog() {
 
 function updateBacklogBtn() {
   const btn = document.getElementById("toggleBacklogBtn");
-  if (btn) btn.textContent = showBacklog ? "📂 Hide Backlog" : "📁 Show Backlog";
+  if (btn) {
+    const textSpan = btn.querySelector(".btn-text");
+    if (textSpan) {
+      textSpan.textContent = showBacklog ? "📂 Backlog" : "📁 Backlog";
+    } else {
+      btn.textContent = showBacklog ? "📂 Backlog" : "📁 Backlog";
+    }
+  }
 }
 
 function hideLoader() {
   const loader = document.getElementById("boardLoader");
-  if (loader) {
-    loader.classList.add("hidden");
-  }
+  if (loader) loader.classList.add("hidden");
 }
 
-// Multi-level column sorting: Due Date (ascending) -> Priority (High -> Med -> Low)
 function sortTasks(taskList) {
   const prioWeight = { high: 0, medium: 1, low: 2 };
   return [...taskList].sort((a, b) => {
@@ -59,7 +117,7 @@ function sortTasks(taskList) {
   });
 }
 
-// Fetch tasks and people from Google Sheet
+// Fetch tasks and people with robust column key normalization
 async function fetchTasksFromSheets(isManual = false) {
   if (!API_URL || API_URL.includes("YOUR_APPS_SCRIPT")) {
     setSyncStatus("error", "Add Google Apps Script URL in Settings (⚙)");
@@ -73,7 +131,20 @@ async function fetchTasksFromSheets(isManual = false) {
   try {
     const res = await fetch(API_URL);
     const json = await res.json();
-    if (json.tasks) data.tasks = json.tasks;
+    if (json.tasks) {
+      data.tasks = json.tasks.map(t => ({
+        id: Number(t.id),
+        title: t.title || "",
+        desc: t.desc || t.description || "",
+        category: t.category || "Other",
+        priority: (t.priority || "medium").toLowerCase(),
+        due: t.due || t.dueDate || t["due date"] || "",
+        status: (t.status || "todo").toLowerCase(),
+        assignee: t.assignee || t.assignees || "",
+        mentor: t.mentor || t.mentors || "",
+        blockedBy: t.blockedBy || t["blocked by"] || t["blocked_by"] || t.blockedby || ""
+      }));
+    }
     if (json.students) data.students = json.students;
     if (json.mentors) data.mentors = json.mentors;
     render();
@@ -83,7 +154,7 @@ async function fetchTasksFromSheets(isManual = false) {
     setSyncStatus("error", "Sync failed • Check connection");
   } finally {
     if (btn) btn.classList.remove("spinning");
-    hideLoader(); // Always dismiss loading overlay once first network round-trip concludes
+    hideLoader();
   }
 }
 
@@ -98,7 +169,6 @@ function resetPollTimer() {
   }
 }
 
-// Push updates to Google Sheet
 async function syncToSheets(action, taskOrId) {
   if (!API_URL || API_URL.includes("YOUR_APPS_SCRIPT")) return;
   setSyncStatus("syncing", "Saving change...");
@@ -147,6 +217,7 @@ function render() {
         ${tasks.length ? "" : '<div class="empty">Drop tasks here</div>'}
       </div>`;
     board.appendChild(col);
+
     const zone = col.querySelector(".dropzone");
     zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("dragover"); });
     zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
@@ -155,6 +226,7 @@ function render() {
       const id = Number(e.dataTransfer.getData("text/plain"));
       moveTask(id, status);
     });
+
     tasks.forEach(task => zone.appendChild(makeCard(task)));
   });
 }
@@ -162,7 +234,6 @@ function render() {
 function makeCard(task) {
   const el = document.createElement("article");
   el.className = "card";
-  el.draggable = true;
   el.dataset.id = task.id;
   el.dataset.priority = task.priority;
   el.dataset.status = task.status;
@@ -171,76 +242,134 @@ function makeCard(task) {
   const person = task.assignee 
     ? `<div class="assignee-line">👤 ${escapeHtml(task.assignee)}</div>` 
     : `<div class="assignee-line" style="color:#8b929e">👤 Unassigned</div>`;
-  const mentor = task.mentor ? `<div class="mentor-line">🎓 Mentor: ${escapeHtml(task.mentor)}</div>` : "";
-  const blockedTag = (task.status === "blocked" && task.blockedBy) 
-    ? `<div class="blocked-by-tag">⛔ Waiting on: ${escapeHtml(task.blockedBy)}</div>` 
-    : "";
+  
+  const mentorLabel = (task.mentor && task.mentor.includes(",")) ? "🎓 Mentors: " : "🎓 Mentor: ";
+  const mentor = task.mentor ? `<div class="mentor-line">${mentorLabel}${escapeHtml(task.mentor)}</div>` : "";
+  
+  let blockedTag = "";
+  if (task.status === "blocked") {
+    blockedTag = task.blockedBy 
+      ? `<div class="blocked-by-tag">⛔ Waiting on: ${escapeHtml(task.blockedBy)}</div>` 
+      : `<div class="blocked-by-tag">⛔ Blocked (External / Prerequisite)</div>`;
+  }
 
   el.innerHTML = `
-    <div class="card-top">
-      <div class="card-title">${escapeHtml(task.title)}</div>
-      <button class="edit-btn" title="Edit details">✏️</button>
+    <div class="drag-strip" title="Hold & drag to move">
+      <div class="drag-strip-dots">
+        <span class="drag-dot"></span>
+        <span class="drag-dot"></span>
+        <span class="drag-dot"></span>
+      </div>
     </div>
-    ${task.desc ? `<div class="card-desc">${escapeHtml(task.desc)}</div>` : ""}
-    <div class="meta">
-      <span class="pill">${escapeHtml(task.category)}</span>
-      <span class="pill priority ${task.priority}">${task.priority.toUpperCase()}</span>
-      ${due}
-    </div>
-    ${blockedTag}
-    <div class="people-tags">
-      ${person}
-      ${mentor}
+    <div class="card-content">
+      <div class="card-top">
+        <div class="card-title">${escapeHtml(task.title)}</div>
+        <button class="edit-btn" title="Edit details">✏️</button>
+      </div>
+      ${task.desc ? `<div class="card-desc">${escapeHtml(task.desc)}</div>` : ""}
+      <div class="meta">
+        <span class="pill">${escapeHtml(task.category)}</span>
+        <span class="pill priority ${task.priority}">${task.priority.toUpperCase()}</span>
+        ${due}
+      </div>
+      ${blockedTag}
+      <div class="people-tags">
+        ${person}
+        ${mentor}
+      </div>
     </div>`;
 
   const editBtn = el.querySelector(".edit-btn");
-  editBtn.addEventListener("click", (e) => {
+  editBtn.addEventListener("pointerdown", e => {
     e.stopPropagation();
     openEditModal(task.id);
   });
 
-  el.addEventListener("click", () => {
-    if (suppressCardClick) return;
+  el.querySelector(".card-content").addEventListener("click", e => {
+    if (suppressCardClick || e.target.closest(".edit-btn")) return;
     openAssignment(task.id);
   });
 
+  el.draggable = true;
   el.addEventListener("dragstart", e => {
     e.dataTransfer.setData("text/plain", String(task.id));
-    el.classList.add("dragging");
   });
-  el.addEventListener("dragend", () => el.classList.remove("dragging"));
-  
-  let startX=0, startY=0, moved=false;
-  el.addEventListener("pointerdown", e => {
-    if (e.pointerType === "mouse") return;
-    startX=e.clientX; startY=e.clientY; moved=false;
-    try { el.setPointerCapture(e.pointerId); } catch(_){}
+
+  const strip = el.querySelector(".drag-strip");
+
+  strip.addEventListener("pointerdown", e => {
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    e.stopPropagation();
+    activeDragCard = el;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    isDraggingActive = false;
+
+    const rect = el.getBoundingClientRect();
+    dragOffsetX = e.clientX - rect.left;
+    dragOffsetY = e.clientY - rect.top;
+
+    try { strip.setPointerCapture(e.pointerId); } catch (_) {}
   });
-  el.addEventListener("pointermove", e => {
-    if (e.pointerType === "mouse") return;
-    if (Math.hypot(e.clientX-startX,e.clientY-startY) > 18) {
-      moved=true;
-      el.style.opacity="0.55";
-      highlightDrop(e.clientX,e.clientY);
+
+  strip.addEventListener("pointermove", e => {
+    if (!activeDragCard || activeDragCard !== el) return;
+    e.stopPropagation();
+
+    const dist = Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY);
+    if (!isDraggingActive && dist > 6) {
+      isDraggingActive = true;
+      suppressCardClick = true;
+      el.classList.add("dragging-origin");
+
+      if (!touchClone) {
+        touchClone = el.cloneNode(true);
+        touchClone.className = el.className + " touch-drag-clone";
+        touchClone.style.width = el.offsetWidth + "px";
+        touchClone.style.left = (e.clientX - dragOffsetX) + "px";
+        touchClone.style.top = (e.clientY - dragOffsetY) + "px";
+        document.body.appendChild(touchClone);
+      }
+    }
+
+    if (isDraggingActive && touchClone) {
+      touchClone.style.left = (e.clientX - dragOffsetX) + "px";
+      touchClone.style.top = (e.clientY - dragOffsetY) + "px";
+      highlightDrop(e.clientX, e.clientY);
     }
   });
-  el.addEventListener("pointerup", e => {
-    if (e.pointerType === "mouse") return;
-    el.style.opacity="";
-    if (moved) {
-      suppressCardClick=true;
-      const target = document.elementFromPoint(e.clientX,e.clientY)?.closest(".dropzone");
-      if (target) moveTask(task.id, target.dataset.status);
-      setTimeout(()=>suppressCardClick=false, 120);
+
+  const endDrag = e => {
+    if (!activeDragCard || activeDragCard !== el) return;
+    e.stopPropagation();
+
+    if (isDraggingActive) {
+      const dropTarget = document.elementFromPoint(e.clientX, e.clientY)?.closest(".dropzone");
+      if (dropTarget) {
+        moveTask(task.id, dropTarget.dataset.status);
+      }
+      setTimeout(() => { suppressCardClick = false; }, 80);
     }
-  });
+
+    if (touchClone) {
+      touchClone.remove();
+      touchClone = null;
+    }
+    el.classList.remove("dragging-origin");
+    document.querySelectorAll(".dropzone").forEach(z => z.classList.remove("dragover"));
+    activeDragCard = null;
+    isDraggingActive = false;
+  };
+
+  strip.addEventListener("pointerup", endDrag);
+  strip.addEventListener("pointercancel", endDrag);
 
   return el;
 }
 
-function highlightDrop(x,y) {
+function highlightDrop(x, y) {
   document.querySelectorAll(".dropzone").forEach(z => z.classList.remove("dragover"));
-  const z = document.elementFromPoint(x,y)?.closest(".dropzone");
+  const z = document.elementFromPoint(x, y)?.closest(".dropzone");
   if (z) z.classList.add("dragover");
 }
 
@@ -261,6 +390,54 @@ function moveTask(id, status) {
   render();
   syncToSheets("update", task);
   if (status === "progress" && !task.assignee) openAssignment(id);
+}
+
+// Add Task Directly From Interface
+function openAddTaskModal() {
+  document.getElementById("addTitle").value = "";
+  document.getElementById("addDesc").value = "";
+  document.getElementById("addCategory").value = "Mechanical";
+  document.getElementById("addPriority").value = "medium";
+  document.getElementById("addDue").value = "";
+  document.getElementById("addStatus").value = "todo";
+  openModal("addTaskModal");
+  setTimeout(() => {
+    const input = document.getElementById("addTitle");
+    if (input) input.focus();
+  }, 100);
+}
+
+function createNewTask() {
+  const title = document.getElementById("addTitle").value.trim();
+  if (!title) {
+    alert("Please enter a task title.");
+    return;
+  }
+
+  let maxId = 0;
+  data.tasks.forEach(t => {
+    const n = Number(t.id);
+    if (!isNaN(n) && n > maxId) maxId = n;
+  });
+  const newId = maxId > 0 ? maxId + 1 : Date.now();
+
+  const newTask = {
+    id: newId,
+    title: title,
+    desc: document.getElementById("addDesc").value.trim(),
+    category: document.getElementById("addCategory").value,
+    priority: document.getElementById("addPriority").value,
+    due: document.getElementById("addDue").value,
+    status: document.getElementById("addStatus").value,
+    assignee: "",
+    mentor: "",
+    blockedBy: ""
+  };
+
+  data.tasks.push(newTask);
+  render();
+  syncToSheets("add", newTask);
+  closeModal("addTaskModal");
 }
 
 // Blocker Prompt Modal Handlers
@@ -305,7 +482,7 @@ function cancelBlockerPrompt() {
   render();
 }
 
-// Assignment Modal (Multiple Students + Mentor)
+// Assignment Modal (Supports Multiple Students & Multiple Mentors)
 function openAssignment(id) {
   const task = data.tasks.find(t => t.id === id);
   if (!task) return;
@@ -314,7 +491,9 @@ function openAssignment(id) {
   pendingAssignees = task.assignee 
     ? task.assignee.split(",").map(s => s.trim()).filter(Boolean)
     : [];
-  pendingMentor = task.mentor || "";
+  pendingMentors = task.mentor 
+    ? task.mentor.split(",").map(s => s.trim()).filter(Boolean)
+    : [];
 
   document.getElementById("assignTaskSummary").innerHTML = `
     <strong>${escapeHtml(task.title)}</strong>
@@ -361,21 +540,26 @@ function renderMentorButtons() {
   mWrap.innerHTML = "";
 
   data.mentors.forEach(name => {
+    const isSelected = pendingMentors.includes(name);
     const b = document.createElement("button");
-    b.className = "person-btn" + (pendingMentor === name ? " selected" : "");
+    b.className = "person-btn" + (isSelected ? " selected" : "");
     b.textContent = name;
     b.onclick = () => {
-      pendingMentor = name;
+      if (pendingMentors.includes(name)) {
+        pendingMentors = pendingMentors.filter(n => n !== name);
+      } else {
+        pendingMentors.push(name);
+      }
       renderMentorButtons();
     };
     mWrap.appendChild(b);
   });
 
   const unMentor = document.createElement("button");
-  unMentor.className = "person-btn" + (!pendingMentor ? " selected" : "");
-  unMentor.textContent = "None";
+  unMentor.className = "person-btn" + (pendingMentors.length === 0 ? " selected" : "");
+  unMentor.textContent = "Clear / None";
   unMentor.onclick = () => {
-    pendingMentor = "";
+    pendingMentors = [];
     renderMentorButtons();
   };
   mWrap.appendChild(unMentor);
@@ -385,7 +569,7 @@ function confirmAssignment() {
   const task = data.tasks.find(x => x.id === activeTaskId);
   if (task) {
     task.assignee = pendingAssignees.join(", ");
-    task.mentor = pendingMentor;
+    task.mentor = pendingMentors.join(", ");
     render();
     syncToSheets("update", task);
   }
@@ -401,6 +585,15 @@ function openEditModal(id) {
   const t = data.tasks.find(x => x.id === id);
   if (!t) return;
   activeTaskId = id;
+
+  // Reset delete button confirmation state
+  const delBtn = document.getElementById("deleteTaskBtn");
+  if (delBtn) {
+    delBtn.dataset.confirming = "false";
+    delBtn.textContent = "Delete Task";
+    delBtn.classList.remove("danger-btn-confirm");
+  }
+
   document.getElementById("editTitle").value = t.title;
   document.getElementById("editDesc").value = t.desc || "";
   document.getElementById("editCategory").value = t.category;
@@ -450,30 +643,65 @@ function saveTaskDetails() {
   closeModal("editModal");
 }
 
+// In-DOM 2-Tap Delete: Immune to Android fullscreen dialog suppression
 function deleteTask() {
   if (!activeTaskId) return;
-  if (confirm("Delete this task?")) {
-    const idToDelete = activeTaskId;
-    data.tasks = data.tasks.filter(t => t.id !== idToDelete);
-    render();
-    syncToSheets("delete", idToDelete);
-    closeModal("editModal");
+  const delBtn = document.getElementById("deleteTaskBtn");
+  
+  if (delBtn.dataset.confirming !== "true") {
+    delBtn.dataset.confirming = "true";
+    delBtn.textContent = "⚠️ Tap Again to Delete";
+    delBtn.classList.add("danger-btn-confirm");
+    setTimeout(() => {
+      if (delBtn && delBtn.dataset.confirming === "true") {
+        delBtn.dataset.confirming = "false";
+        delBtn.textContent = "Delete Task";
+        delBtn.classList.remove("danger-btn-confirm");
+      }
+    }, 4500);
+    return;
   }
+
+  const idToDelete = activeTaskId;
+  data.tasks = data.tasks.filter(t => t.id !== idToDelete);
+  render();
+  syncToSheets("delete", idToDelete);
+  closeModal("editModal");
 }
 
+// Smart "What Should I Do?" (Open tasks + active In-Progress pairing opportunities)
 function openClaim() {
   const available = data.tasks.filter(t => t.status === "todo" || t.status === "backlog");
   const sorted = sortTasks(available);
+  const inProgress = data.tasks.filter(t => t.status === "progress");
   const content = document.getElementById("claimContent");
-  if (!sorted.length) {
-    content.innerHTML = '<div class="empty">Nothing open right now. Great job! 🎉</div>';
-  } else {
-    content.innerHTML = sorted.slice(0, 8).map(t => `
+
+  let html = "";
+
+  if (sorted.length > 0) {
+    html += `<div class="claim-section-title">🚀 Open Tasks (Ready to Start)</div>`;
+    html += sorted.slice(0, 6).map(t => `
       <div class="claim-card" style="cursor:pointer" onclick="closeModal('claimModal'); moveTask(${t.id},'progress')">
         <strong>${escapeHtml(t.title)}</strong>
-        <span>${escapeHtml(t.category)} • ${(t.priority||'medium').toUpperCase()} priority${t.mentor ? " • Mentor: " + escapeHtml(t.mentor) : ""}</span>
+        <span>${escapeHtml(t.category)} • ${(t.priority||'medium').toUpperCase()} priority${t.mentor ? " • " + escapeHtml(t.mentor) : ""}</span>
       </div>`).join("");
   }
+
+  if (inProgress.length > 0) {
+    html += `<div class="claim-section-title" style="margin-top:${sorted.length ? '18px' : '0'}; color:var(--orange);">🤝 Team Up! Active Tasks You Can Help With</div>`;
+    html += inProgress.slice(0, 6).map(t => `
+      <div class="claim-card" style="cursor:pointer; border-left-color: var(--orange);" onclick="closeModal('claimModal'); openAssignment(${t.id})">
+        <strong>${escapeHtml(t.title)}</strong>
+        <span>${escapeHtml(t.category)} • With: <strong>${escapeHtml(t.assignee || 'Unassigned')}</strong>${t.mentor ? " • Mentor: " + escapeHtml(t.mentor) : ""}</span>
+        <div style="font-size:13px; color:var(--blue); margin-top:4px; font-weight:700;">Tap to add yourself as an assignee ➔</div>
+      </div>`).join("");
+  }
+
+  if (!sorted.length && !inProgress.length) {
+    html = `<div class="empty">No tasks open right now! Check in with your subteam lead, mentor, or help organize the shop! 🛠️🎉</div>`;
+  }
+
+  content.innerHTML = html;
   openModal("claimModal");
 }
 
@@ -497,7 +725,7 @@ function saveSettings() {
 
 function openModal(id){ document.getElementById(id).classList.add("open"); }
 function closeModal(id){ document.getElementById(id).classList.remove("open"); }
-document.querySelectorAll(".modal-backdrop").forEach(b => b.addEventListener("click", e => { if (e.target === b) b.classList.remove("open"); }));
+document.querySelectorAll(".modal-backdrop").forEach(b => b.addEventListener("pointerdown", e => { if (e.target === b) b.classList.remove("open"); }));
 
 function formatDate(s) {
   if (!s) return "";
@@ -514,7 +742,15 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape") document.querySelectorAll(".modal-backdrop.open").forEach(x => x.classList.remove("open"));
 });
 
-// Boot, initialize UI state, & start background poll
+// Bind top header toolbar buttons
+bindInstantTap("addTaskBtn", openAddTaskModal);
+bindInstantTap("fullscreenBtn", toggleFullscreen);
+bindInstantTap("toggleBacklogBtn", toggleBacklog);
+bindInstantTap("refreshBtn", manualRefresh);
+bindInstantTap("claimBtn", openClaim);
+bindInstantTap("settingsBtn", openSettings);
+
+// Boot
 updateBacklogBtn();
 fetchTasksFromSheets(false);
 resetPollTimer();
