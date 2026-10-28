@@ -11,6 +11,8 @@ let data = {
 let activeTaskId = null;
 let pendingAssignees = [];
 let pendingMentors = [];
+let pendingNewAssignees = [];
+let pendingNewMentors = [];
 let pendingBlockTaskId = null;
 let suppressCardClick = false;
 let pollTimer = null;
@@ -430,6 +432,41 @@ function moveTask(id, status) {
 }
 
 // Add Task Directly From Interface
+function renderNewTaskPeople() {
+  renderNewTaskPersonButtons("addStudentButtons", data.students, pendingNewAssignees, selected => {
+    pendingNewAssignees = selected;
+    renderNewTaskPeople();
+  });
+  renderNewTaskPersonButtons("addMentorButtons", data.mentors, pendingNewMentors, selected => {
+    pendingNewMentors = selected;
+    renderNewTaskPeople();
+  });
+}
+
+function renderNewTaskPersonButtons(containerId, people, selected, onChange) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = "";
+
+  people.forEach(name => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "person-btn" + (selected.includes(name) ? " selected" : "");
+    button.textContent = name;
+    button.addEventListener("click", () => onChange(selected.includes(name)
+      ? selected.filter(item => item !== name)
+      : [...selected, name]));
+    container.appendChild(button);
+  });
+
+  if (!people.length) {
+    const empty = document.createElement("div");
+    empty.className = "people-hint";
+    empty.textContent = "No names loaded from the People sheet.";
+    container.appendChild(empty);
+  }
+}
+
 function openAddTaskModal() {
   document.getElementById("addTitle").value = "";
   document.getElementById("addDesc").value = "";
@@ -437,6 +474,9 @@ function openAddTaskModal() {
   document.getElementById("addPriority").value = "medium";
   document.getElementById("addDue").value = "";
   document.getElementById("addStatus").value = "todo";
+  pendingNewAssignees = [];
+  pendingNewMentors = [];
+  renderNewTaskPeople();
   openModal("addTaskModal");
   setTimeout(() => {
     const input = document.getElementById("addTitle");
@@ -466,8 +506,8 @@ function createNewTask() {
     priority: document.getElementById("addPriority").value,
     due: document.getElementById("addDue").value,
     status: document.getElementById("addStatus").value,
-    assignee: "",
-    mentor: "",
+    assignee: pendingNewAssignees.join(", "),
+    mentor: pendingNewMentors.join(", "),
     blockedBy: ""
   };
 
@@ -532,13 +572,10 @@ function openAssignment(id) {
     ? task.mentor.split(",").map(s => s.trim()).filter(Boolean)
     : [];
 
-  document.getElementById("assignTaskSummary").innerHTML = `
-    <strong>${escapeHtml(task.title)}</strong>
-    <span>${escapeHtml(task.category)} • ${task.priority.toUpperCase()} priority</span>`;
-
+  pendingNewAssignees = [];
+  pendingNewMentors = [];
   renderStudentButtons();
   renderMentorButtons();
-
   openModal("assignModal");
 }
 
