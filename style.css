@@ -619,3 +619,49 @@ input:focus, textarea:focus, select:focus {
     min-height: 40px;
   }
 }
+
+/* Collapsible category groups */
+.category-group {
+  border: 1px solid #d9dee8;
+  border-radius: 6px;
+  background: #fff;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.category-group summary {
+  min-height: 42px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  cursor: pointer;
+  background: #edf1f8;
+  border-bottom: 1px solid transparent;
+  color: var(--blue);
+  font-weight: 700;
+  touch-action: manipulation;
+}
+.category-group summary::-webkit-details-marker { display: none; }
+.category-group[open] summary { border-bottom-color: #d9dee8; }
+.category-toggle {
+  width: 18px;
+  text-align: center;
+  transition: transform 0.15s ease;
+}
+.category-group:not([open]) .category-toggle { transform: rotate(-90deg); }
+.category-name { flex: 1; min-width: 0; }
+.category-count {
+  min-width: 26px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--blue);
+  color: #fff;
+  font-size: 12px;
+}
+.category-cards { padding: 8px; background: #f6f8fb; }
+.category-cards .card:last-child { margin-bottom: 0; }
+.category-group:not([open]) .category-cards { display: none; }

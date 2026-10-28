@@ -188,7 +188,7 @@ async function syncToSheets(action, taskOrId) {
 function render() {
   const board = document.getElementById("board");
   board.innerHTML = "";
-  
+
   const allCols = [
     ["backlog", "BACKLOG"],
     ["todo", "TO DO"],
@@ -196,7 +196,7 @@ function render() {
     ["blocked", "BLOCKED"],
     ["done", "DONE"]
   ];
-  
+
   const visibleCols = showBacklog ? allCols : allCols.filter(([status]) => status !== "backlog");
   board.style.gridTemplateColumns = `repeat(${visibleCols.length}, minmax(260px, 1fr))`;
 
@@ -204,7 +204,7 @@ function render() {
     const col = document.createElement("section");
     col.className = "column";
     col.dataset.status = status;
-    
+
     const rawTasks = data.tasks.filter(t => t.status === status);
     const tasks = sortTasks(rawTasks);
 
@@ -214,7 +214,6 @@ function render() {
         <div class="count">${tasks.length}</div>
       </div>
       <div class="dropzone" data-status="${status}">
-        ${tasks.length ? "" : '<div class="empty">Drop tasks here</div>'}
       </div>`;
     board.appendChild(col);
 
@@ -227,7 +226,45 @@ function render() {
       moveTask(id, status);
     });
 
-    tasks.forEach(task => zone.appendChild(makeCard(task)));
+    if (!tasks.length) {
+      zone.innerHTML = '<div class="empty">Drop tasks here</div>';
+      return;
+    }
+
+    const categoryGroups = {};
+    tasks.forEach(task => {
+      const category = String(task.category || "Other").trim() || "Other";
+      if (!categoryGroups[category]) categoryGroups[category] = [];
+      categoryGroups[category].push(task);
+    });
+
+    Object.entries(categoryGroups).forEach(([category, groupedTasks]) => {
+      const categoryKey = `${status}-${category.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "other"}`;
+      const collapsedCategories = JSON.parse(localStorage.getItem("ttt_collapsed_categories") || "{}");
+      const group = document.createElement("details");
+      group.className = "category-group";
+      group.dataset.category = category;
+      group.open = collapsedCategories[categoryKey] !== true;
+
+      const summary = document.createElement("summary");
+      summary.innerHTML = `
+        <span class="category-toggle">▾</span>
+        <span class="category-name">${escapeHtml(category)}</span>
+        <span class="category-count">${groupedTasks.length}</span>`;
+      group.appendChild(summary);
+
+      const cardList = document.createElement("div");
+      cardList.className = "category-cards";
+      groupedTasks.forEach(task => cardList.appendChild(makeCard(task)));
+      group.appendChild(cardList);
+      zone.appendChild(group);
+
+      group.addEventListener("toggle", () => {
+        const collapsed = JSON.parse(localStorage.getItem("ttt_collapsed_categories") || "{}");
+        collapsed[categoryKey] = !group.open;
+        localStorage.setItem("ttt_collapsed_categories", JSON.stringify(collapsed));
+      });
+    });
   });
 }
 
