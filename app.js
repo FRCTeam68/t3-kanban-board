@@ -144,7 +144,8 @@ async function fetchTasksFromSheets(isManual = false) {
         status: (t.status || "todo").toLowerCase(),
         assignee: t.assignee || t.assignees || "",
         mentor: t.mentor || t.mentors || "",
-        blockedBy: t.blockedBy || t["blocked by"] || t["blocked_by"] || t.blockedby || ""
+        blockedBy: t.blockedBy || t["blocked by"] || t["blocked_by"] || t.blockedby || "",
+        blockedById: t.blockedById ?? t["blocked by id"] ?? t.blockedByID ?? ""
       }));
     }
     if (json.students) data.students = json.students;
@@ -287,8 +288,9 @@ function makeCard(task) {
   
   let blockedTag = "";
   if (task.status === "blocked") {
-    blockedTag = task.blockedBy 
-      ? `<div class="blocked-by-tag">⛔ Waiting on: ${escapeHtml(task.blockedBy)}</div>` 
+    const blockerName = resolveBlockerName(task);
+    blockedTag = blockerName
+      ? `<div class="blocked-by-tag">⛔ Waiting on: ${escapeHtml(blockerName)}</div>`
       : `<div class="blocked-by-tag">⛔ Blocked (External / Prerequisite)</div>`;
   }
 
@@ -413,7 +415,7 @@ function highlightDrop(x, y) {
 }
 
 function moveTask(id, status) {
-  const task = data.tasks.find(t => t.id === id);
+  const task = data.tasks.find(t => String(t.id) === String(id));
   if (!task || task.status === status) { render(); return; }
   
   if (status === "blocked") {
@@ -508,7 +510,8 @@ function createNewTask() {
     status: document.getElementById("addStatus").value,
     assignee: pendingNewAssignees.join(", "),
     mentor: pendingNewMentors.join(", "),
-    blockedBy: ""
+    blockedBy: "",
+    blockedById: ""
   };
 
   data.tasks.push(newTask);
@@ -530,22 +533,35 @@ function openBlockerPrompt(id) {
   const bSelect = document.getElementById("promptBlockedBySelect");
   bSelect.innerHTML = '<option value="">-- None / External Issue --</option>';
   
-  data.tasks.filter(x => x.id !== id && x.status !== "done").forEach(other => {
+  const blockerOptions = data.tasks.filter(x => x.id !== task.id && x.status !== "done");
+  blockerOptions.forEach(other => {
     const opt = document.createElement("option");
-    opt.value = other.title;
+    opt.value = String(other.id);
     opt.textContent = other.title + " (" + other.category + ")";
-    if (task.blockedBy === other.title) opt.selected = true;
+    if (String(task.blockedById || "") === String(other.id) ||
+        (!task.blockedById && task.blockedBy === other.title)) opt.selected = true;
     bSelect.appendChild(opt);
   });
 
   openModal("blockerPromptModal");
 }
 
+function setBlocker(task, blockerId) {
+  if (!blockerId) {
+    task.blockedById = "";
+    task.blockedBy = "";
+    return;
+  }
+  const blocker = getTaskById(blockerId);
+  task.blockedById = Number(blockerId);
+  task.blockedBy = blocker ? blocker.title : "";
+}
+
 function confirmBlockerPrompt() {
   const task = data.tasks.find(t => t.id === pendingBlockTaskId);
   if (task) {
     task.status = "blocked";
-    task.blockedBy = document.getElementById("promptBlockedBySelect").value;
+    setBlocker(task, document.getElementById("promptBlockedBySelect").value);
     render();
     syncToSheets("update", task);
   }
@@ -689,9 +705,10 @@ function openEditModal(id) {
   bSelect.innerHTML = '<option value="">-- None / External Block --</option>';
   data.tasks.filter(x => x.id !== id && x.status !== "done").forEach(other => {
     const opt = document.createElement("option");
-    opt.value = other.title;
+    opt.value = String(other.id);
     opt.textContent = other.title + " (" + other.category + ")";
-    if (t.blockedBy === other.title) opt.selected = true;
+    if (String(t.blockedById || "") === String(other.id) ||
+        (!t.blockedById && t.blockedBy === other.title)) opt.selected = true;
     bSelect.appendChild(opt);
   });
 
@@ -702,15 +719,31 @@ function openEditModal(id) {
 function saveTaskDetails() {
   const title = document.getElementById("editTitle").value.trim();
   if (!title) { alert("Please enter a title."); return; }
-  const t = data.tasks.find(x => x.id === activeTaskId);
+  const t = data.tasks.find(x => String(x.id) === String(activeTaskId));
   if (t) {
+    const previousTitle = t.title;
     t.title = title;
     t.desc = document.getElementById("editDesc").value.trim();
     t.category = document.getElementById("editCategory").value;
     t.priority = document.getElementById("editPriority").value;
     t.due = document.getElementById("editDue").value;
     t.status = document.getElementById("editStatus").value;
-    t.blockedBy = t.status === "blocked" ? document.getElementById("editBlockedBy").value : "";
+
+    if (t.status === "blocked") {
+      setBlocker(t, document.getElementById("editBlockedBy").value);
+    } else {
+      t.blockedById = "";
+      t.blockedBy = "";
+    }
+
+    data.tasks.forEach(dependent => {
+      if (!dependent.blockedById && dependent.blockedBy === previousTitle) {
+        dependent.blockedById = Number(t.id);
+        dependent.blockedBy = title;
+        syncToSheets("update", dependent);
+      }
+    });
+
     render();
     syncToSheets("update", t);
   }
@@ -795,6 +828,18 @@ function saveSettings() {
   resetPollTimer();
   fetchTasksFromSheets(true);
   closeModal("settingsModal");
+}
+
+function getTaskById(id) {
+  return data.tasks.find(task => String(task.id) === String(id));
+}
+
+function resolveBlockerName(blockedTask) {
+  if (blockedTask.blockedById) {
+    const blocker = getTaskById(blockedTask.blockedById);
+    if (blocker) return blocker.title;
+  }
+  return blockedTask.blockedBy || "";
 }
 
 function openModal(id){ document.getElementById(id).classList.add("open"); }
